@@ -1,0 +1,2577 @@
+{
+  "name": "ContentOps Review Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "resource": "1204593007076468",
+        "workspace": "889210627409604"
+      },
+      "type": "n8n-nodes-base.asanaTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1520,
+        4256
+      ],
+      "id": "4a0ae258-42cc-41d2-9017-7ccd8e83d841",
+      "name": "Task Event Listener",
+      "webhookId": "69467851-5314-4fb5-ac5a-2b9196122a62",
+      "notesInFlow": true,
+      "notes": "Listens for task-level events from the project management system"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "76683063-dca3-458e-84eb-0b6bfd97130e",
+              "leftValue": "={{ $json.resource.resource_subtype }}",
+              "rightValue": "marked_complete",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -1296,
+        4280
+      ],
+      "id": "74bacfb6-bbe2-45b3-8999-75d67d4a01e5",
+      "name": "Is Task Approved?"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "76683063-dca3-458e-84eb-0b6bfd97130e",
+              "leftValue": "={{ $json.resource.resource_subtype }}",
+              "rightValue": "comment_added",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -1296,
+        2912
+      ],
+      "id": "12c0120a-a678-4551-96b6-a168e1213161",
+      "name": "Has New Comment?"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f86b90d2-31c8-41c5-ab1d-bc3ee88a16f4",
+              "name": "operation",
+              "value": "={{ $json.resource.resource_subtype }}",
+              "type": "string"
+            },
+            {
+              "id": "ca47dd00-2024-448d-83b0-7ca408102659",
+              "name": "taskID",
+              "value": "={{ $json.parent.gid }}",
+              "type": "string"
+            },
+            {
+              "id": "d347c226-a363-4eba-b4ed-28958120f810",
+              "name": "resourceId",
+              "value": "={{ $json.resource.gid }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -1072,
+        3008
+      ],
+      "id": "3cc77703-c6e9-44a2-ae8e-b334b7c39fc2",
+      "name": "Parse Event Metadata"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "feb1df23-752e-42e3-9339-ce4c72056f2b",
+                    "leftValue": "={{ $('Parse Event Metadata').first().json.operation }}",
+                    "rightValue": "marked_complete",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Publish Post"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Parse Event Metadata').first().json.operation }}",
+                    "rightValue": "comment_added",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "ab5c0145-cd81-4e26-ac81-0c1080c4c492"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Process Feedback"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        272,
+        2624
+      ],
+      "id": "384cef19-a1b7-4600-b137-18d64d41c713",
+      "name": "Route by Action Type"
+    },
+    {
+      "parameters": {
+        "jsCode": "const allItems = $input.all();\n\n// Flatten all story records\nconst flatStories = allItems.flatMap(({ json }) => {\n  if (json?.data && Array.isArray(json.data)) {\n    return json.data.map(story => ({\n      id: story.gid,\n      text: story.text || '',\n      createdAt: story.created_at || null,\n      author: {\n        id: story.created_by?.gid || null,\n        name: story.created_by?.name || 'Unknown',\n      },\n      type: story.type,\n      resourceSubtype: story.resource_subtype,\n    }));\n  }\n  return [];\n});\n\n// Keep only comment-type stories with valid timestamps\nconst commentStories = flatStories\n  .filter(s =>\n    s.resourceSubtype === 'comment_added' &&\n    typeof s.createdAt === 'string' &&\n    !isNaN(Date.parse(s.createdAt))\n  )\n  .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());\n\nif (commentStories.length === 0) {\n  return [];\n}\n\n// Skip if last comment was from the automation agent\nconst lastComment = commentStories[commentStories.length - 1];\nif (lastComment.author.name === 'C1M Agent') {\n  return [];\n}\n\n// Isolate the current human comment by resource ID\nconst lastNonC1MComments = commentStories\n  .filter(c => c.author.name !== 'C1M Agent' && c.id === $('Parse Event Metadata').first().json.resourceId);\n\nreturn { lastNonC1MComments: lastNonC1MComments.map(c => ({ json: c })), lastThreeComments: commentStories.slice(-2) };\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        2912
+      ],
+      "id": "24fcdb79-310f-47c1-b572-65b5a3802e12",
+      "name": "Filter Human Comments"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "2062a674-8329-4c12-9c1b-9e42bca6d8d4",
+              "name": "postID",
+              "value": "={{ $('Fetch Task Details').first().json.data.notes?.match(/POSTID:\\s*(\\d+)/i)[1]}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -400,
+        2816
+      ],
+      "id": "a533d233-dd4f-4d5f-8df6-9a4ee25f8e9b",
+      "name": "Extract Post ID"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o",
+          "mode": "list",
+          "cachedResultName": "GPT-4O"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=You are an assistant that identifies actionable editorial feedback within task comments for a CMS post.\n\nInput:\n- Human Comments (array with fields: id, text, createdAt, author, type, resourceSubtype):\n  {{ JSON.stringify($json.lastNonC1MComments, null, 2) }}\n- Recent Comment Thread (last 2 comments):\n  {{ JSON.stringify($json.lastThreeComments, null, 2) }}\n- Current Post Content: {{ $('Fetch WordPress Post').first().json.content.rendered }}\n\nTask:\n1. Review the recent comment thread first:\n   - If the FIRST comment contains the keyword `Memory:` AND the LAST comment is a confirmation like \"Yes\" or \"yes\"\n   → Extract only the text after `Memory:` as `memoryContent`.\n   → Set `addAsLongTermMemory = true` and `isFeedbackDetected = false`.\n   → Skip remaining steps.\n\n2. Otherwise, analyze the human comments for any of the following:\n   - Suggestions for improvement\n   - Requests to change content, structure, SEO, tone, or formatting\n   - Specific critiques or ideas\n   Note: Vague praise (\"nice!\", \"looks good\") does NOT count as feedback.\n\n3. Set `isFeedbackDetected = true` if at least one actionable comment is found.\n\n4. If feedback is found, extract the EXACT text — do not paraphrase. Combine multiple comments clearly.\n\n5. Only one flag can be true at a time: `addAsLongTermMemory` OR `isFeedbackDetected`.\n\n6. Check if any feedback references images or visuals:\n   - If yes: set `isImageUpdateFeedback = true`, extract previous image URL from post content, and write a one-sentence `image_prompt`.\n   - Otherwise: `isImageUpdateFeedback = false`, `image_prompt = \"\"`.\n\n7. Return ONLY this JSON:\n{\n  \"isFeedbackDetected\": true or false,\n  \"feedback\": \"Plain-language description: (1) what the issue is, (2) why it matters, (3) what exactly needs to change. Return 'No issues found.' if nothing detected.\",\n  \"memoryContent\": \"[text after Memory: if step 1 applies, else empty string]\",\n  \"addAsLongTermMemory\": true or false,\n  \"isImageUpdateFeedback\": true or false,\n  \"image_prompt\": \"[one-sentence image description if applicable, else empty string]\"\n}"
+            }
+          ]
+        },
+        "jsonOutput": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        944,
+        2912
+      ],
+      "id": "6e729361-4afc-4711-b53b-df757076658e",
+      "name": "Classify Comment Intent"
+    },
+    {
+      "parameters": {
+        "content": "## Step 1 — Detect New Comment\n\nListens for `comment_added` events on a task. When a team member leaves a comment, this branch activates to process the feedback and update the linked CMS post accordingly.",
+        "height": 420,
+        "width": 300
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1398,
+        2652
+      ],
+      "typeVersion": 1,
+      "id": "52bc5aea-9714-4ae5-ad0b-048f78442342",
+      "name": "Note: Comment Branch"
+    },
+    {
+      "parameters": {
+        "content": "## Step 1 — Detect Approval\n\nListens for `marked_complete` events. When a reviewer marks a task done, this branch triggers post publication automatically — no manual steps needed.",
+        "height": 420,
+        "width": 300
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1398,
+        4020
+      ],
+      "typeVersion": 1,
+      "id": "93b068bf-83c9-456e-9e85-d134b9e3941a",
+      "name": "Note: Approval Branch"
+    },
+    {
+      "parameters": {
+        "content": "## Step 2 — Validate Approval Task\n\nAfter receiving an event, this section:\n1. **Parse Event Metadata** — Extracts the action type and task ID from the incoming payload.\n2. **Fetch Task Details** — Retrieves the full task record for validation.\n3. **Confirm Task Type** — Ensures this is a content approval task before proceeding.",
+        "height": 720,
+        "width": 720,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1160,
+        2448
+      ],
+      "typeVersion": 1,
+      "id": "34148bf5-399c-4a2b-83aa-4974f108db85",
+      "name": "Note: Validation Section"
+    },
+    {
+      "parameters": {
+        "content": "## Step 3 — Extract Post Reference\n\nParses the task notes to retrieve the CMS Post ID needed for fetching and updating the linked post. Supports both explicit `POSTID:` tags and URL-based IDs.",
+        "height": 700,
+        "width": 360
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -532,
+        2276
+      ],
+      "typeVersion": 1,
+      "id": "6d1a8bb2-695a-44d8-98d3-2fac0624c930",
+      "name": "Note: Post ID Extraction"
+    },
+    {
+      "parameters": {
+        "content": "## Step 4 — Route & Validate\n\nAfter extracting the Post ID:\n1. **Extract Post ID** — Parses the linked post reference.\n2. **Validate Post ID** — Confirms a valid ID exists before continuing.\n3. **Route by Action Type** — Directs to either the publish flow or the feedback flow.",
+        "height": 960,
+        "width": 720,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1384,
+        3072
+      ],
+      "typeVersion": 1,
+      "id": "1326d778-d2bb-46ae-a1d2-79a746b7de03",
+      "name": "Note: Routing Section"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "7709bd68-7f82-48bc-9286-d4efb145349d",
+              "leftValue": "={{ $json.postID }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -176,
+        2816
+      ],
+      "id": "265accb0-e1d9-4c25-ba2b-2f69182d9798",
+      "name": "Post ID Found?"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b58bc009-ecc5-4515-b5fe-cb23ddddd52f",
+              "name": "isPostIDInvalid",
+              "value": "true",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3568,
+        3872
+      ],
+      "id": "47a79fed-b68f-41a2-8fa5-3e340a9dac32",
+      "name": "Flag Missing Post ID"
+    },
+    {
+      "parameters": {
+        "content": "## Step 6 — Retrieve & Parse Comments\n\n1. **Fetch Task Activity** — Gets recent activity stories for the task.\n2. **Filter Human Comments** — Strips out system messages and agent replies; keeps only authentic human feedback sorted by time.",
+        "height": 760,
+        "width": 400
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        456,
+        2504
+      ],
+      "typeVersion": 1,
+      "id": "49fcceac-f95e-4152-aa54-e9a79cefcdff",
+      "name": "Note: Comment Retrieval"
+    },
+    {
+      "parameters": {
+        "content": "## Step 7 — Classify Comment Intent\n\n**Classify Comment Intent** — Uses GPT-4o to determine:\n- Is this actionable feedback?\n- Is it a long-term memory save request?\n- Does it involve an image change?\n\n**Evaluate Intent Type** — Routes to the correct downstream action.",
+        "height": 520,
+        "width": 480,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        928,
+        2568
+      ],
+      "typeVersion": 1,
+      "id": "391b9564-c504-44cf-8a58-f663f265d137",
+      "name": "Note: Intent Classification"
+    },
+    {
+      "parameters": {
+        "content": "## Step 8 — Apply Feedback to Post\n\n**Fetch WordPress Post** — Retrieves the current post.\n**Revise Post with AI** — Applies editorial changes, respects word count targets, preserves CTA, and optionally generates a new image.\n**Publish Update** — Saves the revised draft back to the CMS.",
+        "height": 740,
+        "width": 1440
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1872,
+        2428
+      ],
+      "typeVersion": 1,
+      "id": "8a20ffd1-51b4-42e2-82ab-013b814ccb3e",
+      "name": "Note: Post Update Section"
+    },
+    {
+      "parameters": {
+        "content": "## Step 9 — Notify Team\n\nPosts a comment back on the task confirming the post was updated, including a direct link. If the feedback qualifies as a reusable rule, the agent also prompts the reviewer to save it to long-term memory.",
+        "height": 620,
+        "width": 680,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        3164,
+        1780
+      ],
+      "typeVersion": 1,
+      "id": "c6fe0a33-612b-45f0-9486-b1f9dcc58752",
+      "name": "Note: Notification Section"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "0420193b-319d-473c-ae71-beab9f4a612e",
+              "name": "asanaGetStoriesError",
+              "value": "={{ $json.error.message }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3568,
+        3488
+      ],
+      "id": "b974e69b-9def-44e1-8732-900e686459d8",
+      "name": "Log Story Fetch Error"
+    },
+    {
+      "parameters": {
+        "content": "## Feedback Processing Branch",
+        "height": 840,
+        "width": 3200,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        480,
+        2424
+      ],
+      "typeVersion": 1,
+      "id": "36370d12-e5bc-4d55-8c9d-73a9df05a0dc",
+      "name": "Note: Feedback Branch"
+    },
+    {
+      "parameters": {
+        "content": "## Publication Branch\n\nWhen a reviewer marks the task complete:\n1. **Publish CMS Post** — Sets the post status to `publish` via the CMS API.\n2. **Notify Reviewer** — Posts a confirmation comment with the live URL.\n3. **Done** — Workflow ends cleanly.",
+        "height": 660,
+        "width": 980,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        310,
+        1836
+      ],
+      "typeVersion": 1,
+      "id": "5a50723a-4417-41c1-a3fa-311c986baa28",
+      "name": "Note: Publication Branch"
+    },
+    {
+      "parameters": {
+        "url": "https://188375.agent.c1m.ai/webhook/e37bf3a1-6cf2-48ea-a8c1-7c96e436e1d6",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "propertyId",
+              "value": "188375"
+            },
+            {
+              "name": "sourceAgent",
+              "value": "={{ $('Fetch Task Details').first().json.data.notes.match(/POST GENERATED BY\\s*:\\s*(.*?),\\n/)[1] == \"AI News flow\" ?\"Skill-Asana-Wordpress-AI-News-Post-Task-Analyser\": \"Skill-Asana-Wordpress-Research-&-Write-Post-Task-Analyser\" }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1872,
+        2432
+      ],
+      "id": "e93a2c20-46a0-433d-aa22-0640c5142336",
+      "name": "Load Editorial Memory",
+      "notesInFlow": true,
+      "retryOnFail": true,
+      "executeOnce": true,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://188375.agent.c1m.ai/webhook/e51546af-e205-42e9-aa26-2439ef93dbe5",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "task_id",
+              "value": "={{ $json.taskID }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -848,
+        3008
+      ],
+      "id": "da3d0cce-eb12-4ac1-afa3-3bc1936af25c",
+      "name": "Fetch Task Details",
+      "notesInFlow": true,
+      "retryOnFail": true,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://188375.agent.c1m.ai/webhook/f6139708-7b3a-4ebb-911f-d4f06fc693e1",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "postID",
+              "value": "={{ $('Extract Post ID').first().json.postID }}"
+            },
+            {
+              "name": "status",
+              "value": "publish"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        496,
+        2048
+      ],
+      "id": "373c6103-da8a-4281-a17c-47511248358d",
+      "name": "Publish CMS Post",
+      "notesInFlow": true,
+      "retryOnFail": true,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://188375.agent.c1m.ai/webhook/fc7c250b-3071-4714-9174-ccd7fd42ce7b",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "asanaApi",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "task_id",
+              "value": "={{ $('Parse Event Metadata').first().json.taskID }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        496,
+        3104
+      ],
+      "id": "642e79c4-f6e7-4e3f-9fe7-22cfbc5a836e",
+      "name": "Fetch Task Activity",
+      "notesInFlow": true,
+      "retryOnFail": true,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://188375.agent.c1m.ai/webhook/5ecdfe00-2607-4517-9187-f04f38f892f1",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "task_id",
+              "value": "={{ $('Parse Event Metadata').first().json.taskID }}"
+            },
+            {
+              "name": "text",
+              "value": "=Post approved and published successfully.\nView it here: {{ $json.link }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        1952
+      ],
+      "id": "4dc19e7e-8ae7-4cef-9068-da17dc9b8681",
+      "name": "Notify: Post Published",
+      "notesInFlow": true,
+      "retryOnFail": true,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://188375.agent.c1m.ai/webhook/5ecdfe00-2607-4517-9187-f04f38f892f1",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "task_id",
+              "value": "={{ $('Parse Event Metadata').first().json.taskID }}"
+            },
+            {
+              "name": "text",
+              "value": "=Feedback applied — post has been updated.\nReview it here: https://c1m.ai/admin/posts/{{ $json.post.id }}\n\n{{ $('Revise Post with AI').first().json.message.content.message }}\n\n{{ $('Check Memory Rule Eligibility').first().json.message.content.can_be_rule ?\n`This feedback could serve as a reusable editorial rule. Type Yes to save it to memory.\n\nMemory: ${$('Classify Comment Intent').first().json.message.content.feedback}`\n:''}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3568,
+        2048
+      ],
+      "id": "a459a4d4-fc4f-4b74-8b5f-06441b112f2e",
+      "name": "Notify: Post Updated",
+      "notesInFlow": true,
+      "retryOnFail": true,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://188375.agent.c1m.ai/webhook/c5a78d26-722a-4349-b106-679352f0d361",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n      \"propertyId\": 188375,\n      \"sourceAgent\": {{ $('Fetch Task Details').first().json.data.notes.match(/POST GENERATED BY\\s*:\\s*(.*?),\\n/)[1] == \"AI News flow\" ?\"Skill-Asana-Wordpress-AI-News-Post-Task-Analyser\": \"Skill-Asana-Wordpress-Research-&-Write-Post-Task-Analyser\" }},\n      \"userId\": \"{{ $json.user.email }}\",\n      \"feedbackText\": \"{{ $('Classify Comment Intent').first().json.message.content.memoryContent}}\",\n      \"isActive\": 1,\n      \"importanceScore\": 0.72,\n      \"conversationContext\": \"Manually Added\",\n      \"retrievalCount\": 0\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3344,
+        3008
+      ],
+      "id": "78b54be1-43f6-444d-84cd-51c7f1fc5a36",
+      "name": "Save to Memory Store",
+      "notesInFlow": true,
+      "executeOnce": false,
+      "retryOnFail": true,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o",
+          "mode": "list",
+          "cachedResultName": "GPT-4O"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=You will evaluate whether a piece of feedback can serve as a reusable editorial rule for a CMS post.\n\nA valid rule directly relates to improving post content: structure, tone, SEO, clarity, formatting, or adding/removing information.\nFeedback about unrelated topics (site design, billing, technical issues) is NOT a valid rule.\n\nReturn ONLY this JSON:\n{\n  \"can_be_rule\": true or false,\n  \"reason\": \"[brief explanation]\"\n}\n\nFeedback to evaluate:\n\"{{ $('Classify Comment Intent').first().json.message.content.feedback }}\""
+            }
+          ]
+        },
+        "jsonOutput": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        1520,
+        2432
+      ],
+      "id": "c39b18f9-e1d9-450f-91b0-cc65d56c7f82",
+      "name": "Check Memory Rule Eligibility"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://admin.n8n.c1m.ai/webhook/7fd5766d-c2de-47c5-8e5a-df80535a7ad3",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "data",
+              "value": "={{ $json }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4240,
+        3392
+      ],
+      "id": "b15693cd-09a1-4103-80fa-029be7b86776",
+      "name": "Send Execution Log",
+      "notesInFlow": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "return {\n  propertyId: 188375,\n  serviceId: $workflow.id,\n  serviceName: \"ContentOps-Review-Automation\",\n  executionDatetime: new Date().getTime(),\n  executionId: $execution.id,\n  executionState: $input.first().json.executionState,\n  data: JSON.stringify({\n    type: $input.first().json.executionState,\n    content: $input.first().json.body || {}\n  }),\n  metadata: $input.first().json.metaData,\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4016,
+        3392
+      ],
+      "id": "b7a106d1-fd91-4b92-aa6e-29574d6f47ad",
+      "name": "Build Log Payload",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "12585a9c-670a-4899-8942-7e5475032f34",
+              "name": "executionState",
+              "value": "=Start",
+              "type": "string"
+            },
+            {
+              "id": "3abe7a8f-f926-48bd-ba76-620e4051c5bf",
+              "name": "metaData",
+              "value": "={executedNode :'Task Event Listener'}",
+              "type": "string"
+            },
+            {
+              "id": "dc3cc9d1-2ede-410c-8475-da0aa153e61d",
+              "name": "=body",
+              "value": "={message: 'Workflow triggered', body: {{ JSON.stringify($json) }}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3792,
+        4448
+      ],
+      "id": "36f981fc-4f84-4d53-8bf5-f8798c19624d",
+      "name": "Initialize Run"
+    },
+    {
+      "parameters": {
+        "content": "## Execution Logging\n\nCaptures workflow state at key points and sends structured payloads to a central logging endpoint. Errors are caught gracefully so the main workflow is never blocked.",
+        "height": 640,
+        "width": 460
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        3946,
+        2912
+      ],
+      "typeVersion": 1,
+      "id": "a9533fc4-4218-4783-a2b2-d9b9ca8eb61d",
+      "name": "Note: Logging Section"
+    },
+    {
+      "parameters": {
+        "jsCode": "return {summary_text: $input.last().json.summary_text};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2096,
+        2240
+      ],
+      "id": "b4f86e18-1e5b-4e31-aebb-4d6b1ac7e958",
+      "name": "Extract Memory Summary"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.message.content.isFeedbackDetected }}",
+                    "rightValue": "true",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    },
+                    "id": "ffa65f98-4f54-482e-a446-376f061bde5f"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Has Feedback"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "5f12cf78-a497-465b-8d5e-03703ed92442",
+                    "leftValue": "={{ $json.message.content.addAsLongTermMemory }}",
+                    "rightValue": "true",
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true",
+                      "singleValue": true
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Save Memory"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1296,
+        2896
+      ],
+      "id": "fb1dbe21-23d9-4d14-ba24-4cbb4af5b076",
+      "name": "Evaluate Intent Type"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://188375.agent.c1m.ai/webhook/5ecdfe00-2607-4517-9187-f04f38f892f1",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "task_id",
+              "value": "={{ $('Parse Event Metadata').first().json.taskID }}"
+            },
+            {
+              "name": "text",
+              "value": "=Your note has been saved to long-term editorial memory."
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3568,
+        2816
+      ],
+      "id": "54aae8a5-f69b-4d09-95b5-1bfd3491f761",
+      "name": "Notify: Memory Saved",
+      "notesInFlow": true,
+      "retryOnFail": true,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "12585a9c-670a-4899-8942-7e5475032f34",
+              "name": "executionState",
+              "value": "=Error",
+              "type": "string"
+            },
+            {
+              "id": "3abe7a8f-f926-48bd-ba76-620e4051c5bf",
+              "name": "metaData",
+              "value": "={executedNode:'Fetch Task Activity'}",
+              "type": "string"
+            },
+            {
+              "id": "dc3cc9d1-2ede-410c-8475-da0aa153e61d",
+              "name": "=body",
+              "value": "={message: 'Failed to retrieve task activity', body:{{ JSON.stringify($json) }}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3792,
+        3488
+      ],
+      "id": "048543ed-6255-4007-b715-dc1b94f3ddd8",
+      "name": "Err: Task Activity"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "12585a9c-670a-4899-8942-7e5475032f34",
+              "name": "executionState",
+              "value": "=Error",
+              "type": "string"
+            },
+            {
+              "id": "3abe7a8f-f926-48bd-ba76-620e4051c5bf",
+              "name": "metaData",
+              "value": "={executedNode:'Fetch Task Details'}",
+              "type": "string"
+            },
+            {
+              "id": "dc3cc9d1-2ede-410c-8475-da0aa153e61d",
+              "name": "=body",
+              "value": "={message: 'Failed to fetch task details', body:{{ JSON.stringify($json) }}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3792,
+        4256
+      ],
+      "id": "d5d2f821-6e71-4275-bc00-c269bfa43803",
+      "name": "Err: Task Details"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "12585a9c-670a-4899-8942-7e5475032f34",
+              "name": "executionState",
+              "value": "=Error",
+              "type": "string"
+            },
+            {
+              "id": "3abe7a8f-f926-48bd-ba76-620e4051c5bf",
+              "name": "metaData",
+              "value": "={executedNode:'Classify Comment Intent'}",
+              "type": "string"
+            },
+            {
+              "id": "dc3cc9d1-2ede-410c-8475-da0aa153e61d",
+              "name": "=body",
+              "value": "={message: 'Intent classification failed', body:{{ JSON.stringify($json) }}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3792,
+        3296
+      ],
+      "id": "36f82087-cc39-4ade-8d18-e7bd0bf526cb",
+      "name": "Err: Intent Classification"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "12585a9c-670a-4899-8942-7e5475032f34",
+              "name": "executionState",
+              "value": "=Error",
+              "type": "string"
+            },
+            {
+              "id": "3abe7a8f-f926-48bd-ba76-620e4051c5bf",
+              "name": "metaData",
+              "value": "={executedNode:'Save to Memory Store'}",
+              "type": "string"
+            },
+            {
+              "id": "dc3cc9d1-2ede-410c-8475-da0aa153e61d",
+              "name": "=body",
+              "value": "={message: 'Failed to save memory entry', body:{{ JSON.stringify($json) }}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3792,
+        3104
+      ],
+      "id": "a95988d2-040b-4cfd-8876-97ff8f4857a9",
+      "name": "Err: Memory Save"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "12585a9c-670a-4899-8942-7e5475032f34",
+              "name": "executionState",
+              "value": "=Error",
+              "type": "string"
+            },
+            {
+              "id": "3abe7a8f-f926-48bd-ba76-620e4051c5bf",
+              "name": "metaData",
+              "value": "={executedNode:'Fetch WordPress Post'}",
+              "type": "string"
+            },
+            {
+              "id": "dc3cc9d1-2ede-410c-8475-da0aa153e61d",
+              "name": "=body",
+              "value": "={message: 'Failed to retrieve CMS post', body:{{ JSON.stringify($json) }}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3792,
+        2720
+      ],
+      "id": "5f69edf6-8545-476c-9d7b-36e979541cf9",
+      "name": "Err: Post Fetch (Feedback)"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "12585a9c-670a-4899-8942-7e5475032f34",
+              "name": "executionState",
+              "value": "=Complete",
+              "type": "string"
+            },
+            {
+              "id": "3abe7a8f-f926-48bd-ba76-620e4051c5bf",
+              "name": "metaData",
+              "value": "={executedNode:'Save to Memory Store'}",
+              "type": "string"
+            },
+            {
+              "id": "dc3cc9d1-2ede-410c-8475-da0aa153e61d",
+              "name": "=body",
+              "value": "={message: 'Memory entry saved', body:{{ JSON.stringify($json) }}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3792,
+        2912
+      ],
+      "id": "0b4959fd-77a4-4079-9260-9184498c5659",
+      "name": "Done: Memory Saved"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "12585a9c-670a-4899-8942-7e5475032f34",
+              "name": "executionState",
+              "value": "=Error",
+              "type": "string"
+            },
+            {
+              "id": "3abe7a8f-f926-48bd-ba76-620e4051c5bf",
+              "name": "metaData",
+              "value": "={executedNode:'Load Editorial Memory'}",
+              "type": "string"
+            },
+            {
+              "id": "dc3cc9d1-2ede-410c-8475-da0aa153e61d",
+              "name": "=body",
+              "value": "={message: 'Failed to load editorial memory', body:{{ JSON.stringify($json) }}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3792,
+        2528
+      ],
+      "id": "459bb76d-5beb-41d8-9439-cda7e6823fe9",
+      "name": "Err: Memory Load"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "12585a9c-670a-4899-8942-7e5475032f34",
+              "name": "executionState",
+              "value": "=Error",
+              "type": "string"
+            },
+            {
+              "id": "3abe7a8f-f926-48bd-ba76-620e4051c5bf",
+              "name": "metaData",
+              "value": "={executedNode:'Flag Missing Post ID'}",
+              "type": "string"
+            },
+            {
+              "id": "dc3cc9d1-2ede-410c-8475-da0aa153e61d",
+              "name": "=body",
+              "value": "={message: 'Post ID could not be resolved'}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3792,
+        3872
+      ],
+      "id": "a466b04c-5d4b-4a22-a988-678abb1d2c09",
+      "name": "Err: Invalid Post ID"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "12585a9c-670a-4899-8942-7e5475032f34",
+              "name": "executionState",
+              "value": "=Complete",
+              "type": "string"
+            },
+            {
+              "id": "3abe7a8f-f926-48bd-ba76-620e4051c5bf",
+              "name": "metaData",
+              "value": "={executedNode:'Notify: Post Published'}",
+              "type": "string"
+            },
+            {
+              "id": "dc3cc9d1-2ede-410c-8475-da0aa153e61d",
+              "name": "=body",
+              "value": "={message: 'Post published and team notified', body:{{$json}}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1008,
+        1856
+      ],
+      "id": "63fa7a49-7390-46c5-83cf-616d833d3c4e",
+      "name": "Done: Post Published"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "12585a9c-670a-4899-8942-7e5475032f34",
+              "name": "executionState",
+              "value": "=Error",
+              "type": "string"
+            },
+            {
+              "id": "3abe7a8f-f926-48bd-ba76-620e4051c5bf",
+              "name": "metaData",
+              "value": "={executedNode:'Apply Updated Post'}",
+              "type": "string"
+            },
+            {
+              "id": "dc3cc9d1-2ede-410c-8475-da0aa153e61d",
+              "name": "=body",
+              "value": "={message: 'Post update (feedback) failed', body:{{ JSON.stringify($json) }}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3792,
+        2336
+      ],
+      "id": "ae658364-12fd-463d-9cb9-cdfc5b886cf5",
+      "name": "Err: Post Update (Feedback)"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "12585a9c-670a-4899-8942-7e5475032f34",
+              "name": "executionState",
+              "value": "=Error",
+              "type": "string"
+            },
+            {
+              "id": "3abe7a8f-f926-48bd-ba76-620e4051c5bf",
+              "name": "metaData",
+              "value": "={executedNode:'Publish CMS Post'}",
+              "type": "string"
+            },
+            {
+              "id": "dc3cc9d1-2ede-410c-8475-da0aa153e61d",
+              "name": "=body",
+              "value": "={message: 'Failed to publish CMS post', body:{{$json}}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1008,
+        2336
+      ],
+      "id": "4e8b43c1-394c-4c47-8683-57a81ec80dc7",
+      "name": "Err: CMS Publish"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "12585a9c-670a-4899-8942-7e5475032f34",
+              "name": "executionState",
+              "value": "=Error",
+              "type": "string"
+            },
+            {
+              "id": "3abe7a8f-f926-48bd-ba76-620e4051c5bf",
+              "name": "metaData",
+              "value": "={executedNode:'Notify: Post Published'}",
+              "type": "string"
+            },
+            {
+              "id": "dc3cc9d1-2ede-410c-8475-da0aa153e61d",
+              "name": "=body",
+              "value": "={message: 'Failed to post publish notification', body:{{$json}}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1008,
+        2144
+      ],
+      "id": "0b62e5fb-db66-4d09-bc22-364de11007e6",
+      "name": "Err: Publish Notification"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "12585a9c-670a-4899-8942-7e5475032f34",
+              "name": "executionState",
+              "value": "=Error",
+              "type": "string"
+            },
+            {
+              "id": "3abe7a8f-f926-48bd-ba76-620e4051c5bf",
+              "name": "metaData",
+              "value": "={executedNode:'Notify: Post Updated'}",
+              "type": "string"
+            },
+            {
+              "id": "dc3cc9d1-2ede-410c-8475-da0aa153e61d",
+              "name": "=body",
+              "value": "={message: 'Failed to post update notification', body:{{ JSON.stringify($json) }}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3792,
+        1952
+      ],
+      "id": "7422a62e-d4b0-449c-8ecf-54be9adb2093",
+      "name": "Err: Update Notification"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "12585a9c-670a-4899-8942-7e5475032f34",
+              "name": "executionState",
+              "value": "=Complete",
+              "type": "string"
+            },
+            {
+              "id": "3abe7a8f-f926-48bd-ba76-620e4051c5bf",
+              "name": "metaData",
+              "value": "={executedNode:'Notify: Post Updated'}",
+              "type": "string"
+            },
+            {
+              "id": "dc3cc9d1-2ede-410c-8475-da0aa153e61d",
+              "name": "=body",
+              "value": "={message: 'Post updated and team notified', body:{{ JSON.stringify($json) }}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3792,
+        2144
+      ],
+      "id": "e287387b-a509-4aef-966c-cf9ced7b1549",
+      "name": "Done: Update Notified"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "12585a9c-670a-4899-8942-7e5475032f34",
+              "name": "executionState",
+              "value": "=Error",
+              "type": "string"
+            },
+            {
+              "id": "3abe7a8f-f926-48bd-ba76-620e4051c5bf",
+              "name": "metaData",
+              "value": "={executedNode:'Confirm Task Type'}",
+              "type": "string"
+            },
+            {
+              "id": "dc3cc9d1-2ede-410c-8475-da0aa153e61d",
+              "name": "=body",
+              "value": "={message: 'Task type not recognised — skipping', body:{{ JSON.stringify($json) }}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3792,
+        4064
+      ],
+      "id": "04da73ba-f553-49ef-a82a-45ede42e5a2a",
+      "name": "Err: Unrecognised Task Type"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "e9d81fc5-6acb-483d-9046-92a290ede7f4",
+              "leftValue": "={{ $('Fetch Task Details').first().json.data.name }}",
+              "rightValue": "#WordpressPostApproval",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -624,
+        2912
+      ],
+      "id": "c4f5dc22-2283-4332-8229-9d3ee68c791b",
+      "name": "Confirm Task Type"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://admin.n8n.c1m.ai/webhook/7fd5766d-c2de-47c5-8e5a-df80535a7ad3",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "data",
+              "value": "={{ $json }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1584,
+        2144
+      ],
+      "id": "ffb224a9-ade8-4581-a4f7-5c3079eb7ec3",
+      "name": "Send Execution Log 2",
+      "notesInFlow": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "return {\n  propertyId: 188375,\n  serviceId: $workflow.id,\n  serviceName: \"ContentOps-Review-Automation\",\n  executionDatetime: new Date().getTime(),\n  executionId: $execution.id,\n  executionState: $input.first().json.executionState,\n  data: JSON.stringify({\n    type: $input.first().json.executionState,\n    content: `${Object.entries($input.first().json.body || {})} `\n  }),\n  metadata: {...$execution.customData , ...( $input.first().json.metaData || {})},\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1296,
+        2144
+      ],
+      "id": "d1acd37a-05c2-4245-87ec-e4650fa0efac",
+      "name": "Build Log Payload 2",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "content": "## Execution Logging (Publication Branch)\n\nMirror of the main logging setup — captures success and failure states from the publication path and forwards them to the central log endpoint.",
+        "height": 780,
+        "width": 460
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        1296,
+        1792
+      ],
+      "typeVersion": 1,
+      "id": "bf3da2bc-cef0-49b8-825b-ef14642da46c",
+      "name": "Note: Logging (Publication)"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1872,
+        2144
+      ],
+      "id": "1d6d26bd-ae1f-495b-9e1a-c4c3246bc3c4",
+      "name": "End (Publication)"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        4464,
+        3392
+      ],
+      "id": "8b5e2089-de79-44db-9ae9-3ab7ec7b2760",
+      "name": "End (Feedback)"
+    },
+    {
+      "parameters": {
+        "content": "## Validate Post Reference",
+        "height": 300,
+        "width": 300,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -54,
+        2580
+      ],
+      "id": "9a47c7a2-ef61-4f85-abe0-9168dd19ff0a",
+      "name": "Note: Validate Post Ref"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "12585a9c-670a-4899-8942-7e5475032f34",
+              "name": "executionState",
+              "value": "=Error",
+              "type": "string"
+            },
+            {
+              "id": "3abe7a8f-f926-48bd-ba76-620e4051c5bf",
+              "name": "metaData",
+              "value": "={executedNode:'Fetch WordPress Post'}",
+              "type": "string"
+            },
+            {
+              "id": "dc3cc9d1-2ede-410c-8475-da0aa153e61d",
+              "name": "=body",
+              "value": "={message: 'Failed to retrieve CMS post for publish', body:{{ JSON.stringify($json) }}}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3792,
+        3680
+      ],
+      "id": "f23db9b4-e636-47e8-9b98-dad7b53c82b2",
+      "name": "Err: Post Fetch (Publish)"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "6f1b890b-2193-409b-8e36-ea51fe985d82",
+              "leftValue": "={{ $('Classify Comment Intent').first().json.message.content.isImageUpdateFeedback }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "b34540d7-ceed-4484-a3be-9d83f8e3df86",
+              "leftValue": "={{ $('Classify Comment Intent').first().json.message.content.image_prompt }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2320,
+        2240
+      ],
+      "id": "644f1797-1457-4dea-b633-ea49fa44c599",
+      "name": "Needs New Image?"
+    },
+    {
+      "parameters": {
+        "resource": "image",
+        "model": "gpt-image-1",
+        "prompt": "=Show:{{ $('Classify Comment Intent').first().json.message.content.image_prompt }}\nThe humans should have realistic, detailed faces with natural expressions and lifelike features.\n- Do not add any text on the image.\n- Do not include robots, cyborgs, or humanoid representations of AI.\n- Style: realistic, shallow depth of field, professional lighting, captured with a Sigma 85mm f/1.4 lens.",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        2544,
+        2096
+      ],
+      "id": "74287353-6211-49a1-ac94-a37339e21a46",
+      "name": "Generate Replacement Image"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://188375.agent.c1m.ai/webhook/c4cbee7b-5282-4d41-b6ee-9093d51ef9da",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "postID",
+              "value": "={{ $('Extract Post ID').first().json.postID }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        48,
+        2720
+      ],
+      "id": "fc2fe125-7e54-4bc2-8b22-318ccfe91a45",
+      "name": "Fetch WordPress Post",
+      "notesInFlow": true,
+      "retryOnFail": true,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://188375.agent.c1m.ai/webhook/c1m/images",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "wordpressApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {}
+          ]
+        },
+        "sendBody": true,
+        "contentType": "binaryData",
+        "inputDataFieldName": "data",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2768,
+        2096
+      ],
+      "id": "79841b31-6c02-4961-ac37-cf4d59510e9c",
+      "name": "Upload New Image",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "url": "https://188375.agent.c1m.ai/webhook/2994870a-0e44-44ad-811a-4d83430089ed",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2768,
+        3008
+      ],
+      "id": "e02bd6dc-abaa-4c08-ba59-e28c3f8e96ef",
+      "name": "Fetch Team Member List",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const asanaUsers = $input.first().json.data;\n\nconst user = asanaUsers.find(item => Number(item.gid) == Number($('Fetch Task Details').first().json.data.assignee.gid));\n\nreturn {user};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3056,
+        3008
+      ],
+      "id": "206aa615-23a8-4887-97b2-d37f684cab19",
+      "name": "Match Assignee to Email"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://188375.agent.c1m.ai/webhook/f6139708-7b3a-4ebb-911f-d4f06fc693e1",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "postID",
+              "value": "={{ $('Extract Post ID').first().json.postID }}"
+            },
+            {
+              "name": "title",
+              "value": "={{ $json.message.content.title.length ? $json.message.content.title : $('Fetch WordPress Post').first().json.title }}"
+            },
+            {
+              "name": "content",
+              "value": "={{ $json.message.content.updated_content }}"
+            },
+            {
+              "name": "status",
+              "value": "draft"
+            },
+            {
+              "name": "image_url",
+              "value": "={{ $('Upload New Image').isExecuted ? $('Upload New Image').first().json.url : null }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3344,
+        2240
+      ],
+      "id": "23a587e1-3365-4a90-b296-aff75b34e88b",
+      "name": "Apply Updated Post",
+      "notesInFlow": true,
+      "retryOnFail": true,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-5.1",
+          "mode": "list",
+          "cachedResultName": "GPT-5.1"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=* postContent (string) – Current post content: {{ $('Fetch WordPress Post').first().json.content }}\n* title (string) – Current post title: \"{{ $('Fetch WordPress Post').first().json.title }}\"\n* feedback (string) – Editorial feedback to apply: {{ JSON.stringify($('Classify Comment Intent').first().json.message.content.feedback) }}\n* image_id – New image URL if one was uploaded: {{ $('Upload New Image').isExecuted ? $('Upload New Image').first().json.url : null }}\n* Optional constraints:\n    * wordcount – Target total word count: {{ $('Fetch Task Details').first().json.data.notes.includes('REQUESTED WORD COUNT') ? $('Fetch Task Details').first().json.data.notes?.match(/REQUESTED WORD COUNT:\\s*(\\d+)/i)[1] : 1500 }}\n    * sections – Target number of sections: {{ $('Fetch Task Details').first().json.data.notes.includes('REQUESTED SECTIONS') ? $('Fetch Task Details').first().json.data.notes?.match(/REQUESTED SECTIONS:\\s*(\\d+)/i)[1] : 6}}\n\nInstructions:\n1. Apply all feedback logically and naturally to postContent.\n2. Ensure the final content meets the target wordcount and number of sections if provided.\n3. Update the title only if feedback suggests it or the current title is unclear.\n4. Preserve the original CTA if present.\n5. Do not include the feedback summary in the output.\n"
+            },
+            {
+              "content": "=You are a senior content editor specialising in updating CMS posts based on reviewer feedback. Your goal is to apply changes accurately while preserving SEO value, brand voice, and readability.\n\nRules & Guidelines:\n\n1. Intent Analysis (First Step):\n    * Analyse the feedback to determine what needs updating:\n      - What is the scope? Entire content, specific sections, title, image, or a combination?\n      - Determine whether the intent is REPLACE (remove old, write new), ADD (keep existing, insert new), or MODIFY (update in place).\n    \n    * Categorise intent:\n      - Title update: feedback mentions or implies headline change\n      - Content update: body text changes, wordcount, section restructure\n      - Image update: feedback mentions visuals OR an image_id is present\n    \n    * Only update elements matching the identified intent. Return all others unchanged.\n\n2. Wordcount & Sections:\n    * MANDATORY: updated_content MUST meet or exceed the target wordcount.\n    * Expand sections with examples, scenarios, or case studies as needed.\n    * Never remove existing content to reduce wordcount.\n    * Section count must match the target exactly (count H2 headings).\n\n3. CTA Preservation (MANDATORY):\n    * Never remove or alter an existing CTA unless explicitly requested.\n    * Always place the CTA at or near the end.\n\n4. Content Structure:\n    * REPLACE intent: remove all old sections, write entirely new content for the specified topics.\n    * ADD intent: keep existing content, insert new sections appropriately.\n    * MODIFY intent: improve content in place, keep topics and structure.\n    * Mandatory sections: Intro, Key Concepts, Conclusion.\n    * Final structure: Intro > Key Concepts > Stories > Why It Matters > Conclusion.\n\n5. Style:\n    * Vary sentence structure — avoid repetitive patterns and parallel constructions.\n    * Brand voice: confident, approachable, solution-focused, educational.\n    * Active voice, strong verbs, direct address (\"you\", \"your\").\n    * Avoid jargon overload. Explain technical concepts clearly.\n    * Zero-tolerance for contrastive constructions: \"not just\", \"not merely\", \"goes beyond\", \"isn't just\", \"more than just\", \"but also\" — rewrite every instance as a direct positive statement.\n\n6. Editorial Memory:\n    * Follow all SEO and editorial rules provided here: {{ $('Extract Memory Summary').first().json.summary_text }}\n\n7. Output (JSON only):\n{\n  \"updated_content\": \"[revised content in valid markdown, \\n separated, no banner image in body]\",\n  \"title\": \"[new title if changed, else same as input]\",\n  \"image\": \"[image id if image intent, else empty string]\",\n  \"updated_fields\": \"[list of updated elements: content, title, image, or combinations]\",\n  \"message\": \"[friendly confirmation of what was updated]\"\n}\n\nValidation before output:\n1. Intent correctly identified\n2. If REPLACE: old sections removed, new content present\n3. H2 count matches target section count\n4. Wordcount meets or exceeds target\n5. CTA preserved\n6. No contrastive constructions remain\n7. All unchanged fields returned exactly as received\n",
+              "role": "system"
+            }
+          ]
+        },
+        "jsonOutput": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1.8,
+      "position": [
+        2992,
+        2240
+      ],
+      "id": "036ff887-ec3d-4117-9898-369b48b4e00e",
+      "name": "Revise Post with AI"
+    }
+  ],
+  "pinData": {
+    "Task Event Listener": [
+      {
+        "json": {
+          "created_at": "2026-05-25T10:27:42.511Z",
+          "action": "added",
+          "user": {
+            "gid": "1211114623279811",
+            "resource_type": "user"
+          },
+          "resource": {
+            "gid": "1215095761727199",
+            "resource_type": "story",
+            "resource_subtype": "comment_added"
+          },
+          "parent": {
+            "gid": "1215096244008655",
+            "resource_type": "task",
+            "resource_subtype": "default_task"
+          }
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Task Event Listener": {
+      "main": [
+        [
+          {
+            "node": "Is Task Approved?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Has New Comment?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Initialize Run",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Task Approved?": {
+      "main": [
+        [
+          {
+            "node": "Parse Event Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has New Comment?": {
+      "main": [
+        [
+          {
+            "node": "Parse Event Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Event Metadata": {
+      "main": [
+        [
+          {
+            "node": "Fetch Task Details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Action Type": {
+      "main": [
+        [
+          {
+            "node": "Publish CMS Post",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fetch Task Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Human Comments": {
+      "main": [
+        [
+          {
+            "node": "Classify Comment Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Post ID": {
+      "main": [
+        [
+          {
+            "node": "Post ID Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify Comment Intent": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Intent Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post ID Found?": {
+      "main": [
+        [
+          {
+            "node": "Fetch WordPress Post",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Flag Missing Post ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Flag Missing Post ID": {
+      "main": [
+        [
+          {
+            "node": "Err: Invalid Post ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Story Fetch Error": {
+      "main": [
+        [
+          {
+            "node": "Err: Task Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Editorial Memory": {
+      "main": [
+        [
+          {
+            "node": "Extract Memory Summary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Err: Memory Load",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Task Details": {
+      "main": [
+        [
+          {
+            "node": "Confirm Task Type",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Err: Task Details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Publish CMS Post": {
+      "main": [
+        [
+          {
+            "node": "Notify: Post Published",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Err: CMS Publish",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Task Activity": {
+      "main": [
+        [
+          {
+            "node": "Filter Human Comments",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Story Fetch Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify: Post Published": {
+      "main": [
+        [
+          {
+            "node": "Done: Post Published",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Err: Publish Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify: Post Updated": {
+      "main": [
+        [
+          {
+            "node": "Done: Update Notified",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Err: Update Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save to Memory Store": {
+      "main": [
+        [
+          {
+            "node": "Notify: Memory Saved",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Err: Memory Save",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Memory Rule Eligibility": {
+      "main": [
+        [
+          {
+            "node": "Load Editorial Memory",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Execution Log": {
+      "main": [
+        [
+          {
+            "node": "End (Feedback)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Log Payload": {
+      "main": [
+        [
+          {
+            "node": "Send Execution Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Initialize Run": {
+      "main": [
+        [
+          {
+            "node": "Build Log Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Memory Summary": {
+      "main": [
+        [
+          {
+            "node": "Needs New Image?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Intent Type": {
+      "main": [
+        [
+          {
+            "node": "Check Memory Rule Eligibility",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fetch Team Member List",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Err: Intent Classification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify: Memory Saved": {
+      "main": [
+        [
+          {
+            "node": "Done: Memory Saved",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Err: Post Fetch (Feedback)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Err: Task Activity": {
+      "main": [
+        [
+          {
+            "node": "Build Log Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Err: Task Details": {
+      "main": [
+        [
+          {
+            "node": "Build Log Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Err: Intent Classification": {
+      "main": [
+        [
+          {
+            "node": "Build Log Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Err: Memory Save": {
+      "main": [
+        [
+          {
+            "node": "Build Log Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Err: Post Fetch (Feedback)": {
+      "main": [
+        [
+          {
+            "node": "Build Log Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Done: Memory Saved": {
+      "main": [
+        [
+          {
+            "node": "Build Log Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Err: Memory Load": {
+      "main": [
+        [
+          {
+            "node": "Build Log Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Err: Invalid Post ID": {
+      "main": [
+        [
+          {
+            "node": "Build Log Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Done: Post Published": {
+      "main": [
+        [
+          {
+            "node": "Build Log Payload 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Err: Post Update (Feedback)": {
+      "main": [
+        [
+          {
+            "node": "Build Log Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Err: CMS Publish": {
+      "main": [
+        [
+          {
+            "node": "Build Log Payload 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Err: Publish Notification": {
+      "main": [
+        [
+          {
+            "node": "Build Log Payload 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Err: Update Notification": {
+      "main": [
+        [
+          {
+            "node": "Build Log Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Done: Update Notified": {
+      "main": [
+        [
+          {
+            "node": "Build Log Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Err: Unrecognised Task Type": {
+      "main": [
+        [
+          {
+            "node": "Build Log Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Confirm Task Type": {
+      "main": [
+        [
+          {
+            "node": "Extract Post ID",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Err: Unrecognised Task Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Execution Log 2": {
+      "main": [
+        [
+          {
+            "node": "End (Publication)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Log Payload 2": {
+      "main": [
+        [
+          {
+            "node": "Send Execution Log 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Err: Post Fetch (Publish)": {
+      "main": [
+        [
+          {
+            "node": "Build Log Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs New Image?": {
+      "main": [
+        [
+          {
+            "node": "Generate Replacement Image",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Revise Post with AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Replacement Image": {
+      "main": [
+        [
+          {
+            "node": "Upload New Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch WordPress Post": {
+      "main": [
+        [
+          {
+            "node": "Route by Action Type",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Err: Post Fetch (Publish)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload New Image": {
+      "main": [
+        [
+          {
+            "node": "Revise Post with AI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Team Member List": {
+      "main": [
+        [
+          {
+            "node": "Match Assignee to Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Match Assignee to Email": {
+      "main": [
+        [
+          {
+            "node": "Save to Memory Store",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply Updated Post": {
+      "main": [
+        [
+          {
+            "node": "Notify: Post Updated",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Err: Post Update (Feedback)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Revise Post with AI": {
+      "main": [
+        [
+          {
+            "node": "Apply Updated Post",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "7dae1be5-74d8-4c92-a268-cb6a14cd9367",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "290fc7599aed09a0d1a6f36c960bcdf8e51b8654c65d96925e9561040b9cfbb5"
+  },
+  "id": "u63vYHJmUqmihi0K",
+  "tags": [
+    {
+      "updatedAt": "2026-06-20T10:18:37.684Z",
+      "createdAt": "2026-06-20T10:18:37.684Z",
+      "id": "jikPN0zyDOFCBebo",
+      "name": "Trigger"
+    }
+  ]
+}
